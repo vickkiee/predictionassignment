@@ -1,0 +1,115 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Victoria O."
+date: "20/07/2020"
+output: html_document
+---
+
+## Introduction
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. The prediction model developed will be used to predict 20 different test cases.
+
+## Load Packages
+```{r }
+library(caret)
+library(randomForest)
+library(lattice)
+```
+
+## Load data 
+Loading training and testing data sets. 
+```{r }
+training_data <- read.csv("pml-training.csv", header=TRUE, sep=",",stringsAsFactors=FALSE)
+testing_data <- read.csv("pml-testing.csv", header=TRUE, sep=",",stringsAsFactors=FALSE)
+summary(training_data$var_total_accel_belt)
+```
+There are 19622 observations, consisting of 160 columns
+## Data preprocessing
+
+There are many variables in the dataset contain invalid values such as NA’s and blanks. These variables with large amount of invalid values are removed. 
+
+```{r }
+dataTidy <- training_data[,-c(grep("^amplitude|^kurtosis|^skewness|^avg|^cvtd_timestamp|^max|^min|^new_window|^raw_timestamp|^stddev|^var|^user_name|X",names(training_data)))]
+
+paste("Complete Cases:")
+table(complete.cases(dataTidy))
+```
+### Data Split
+the tidy data is split into two sets, 60% for training and 40% for testing
+
+```{r }
+set.seed(39)
+inTrain <- createDataPartition(y=dataTidy$classe, p=0.6,list=FALSE)
+dataTidyTrain <- dataTidy[inTrain,]
+dataTidyTest <- dataTidy[-inTrain,]
+```
+
+
+
+
+
+
+## Model training and tuning 
+
+The RandomForest and Gradient Boosting model is built. A random forest model is one of the best prediction models. It can reduce training variance and sensitivity to overfitting. 
+
+It is determined that this is a classification problem and the aim of the comparison is to discover which algorithm suits the data better.The RandomForest and Gradient Boosting algorithms are selected for comparison based on the accuracy these algorithms can achieve in classification. The Kappa metric is selected as the comparison criteria. To reduce the risk of overfitting, a 5-fold cross validation is employed during model building. 
+
+```{r }
+# Model tuning and training
+set.seed(39)
+# k-fold validation - 5-fold validation, use kappa as metric
+fitControl <- trainControl(method = "cv",  number = 5)
+gbmFit <- train(classe~., data=dataTidyTrain, method="gbm", metric="Kappa", trControl=fitControl,verbose=FALSE)
+```
+
+```{r }
+rfFit <- train(classe~.,data=dataTidyTrain,method="rf", metric="Kappa", trControl=fitControl)
+```
+
+## Model Selection
+The models are  compared. Based on the plot, RandomForest algorithm fares better than the Gradient Boosting algorithm for this dataset, achieving a Kappa mean value of 0.996. It can also be seen that the RandomForest algorithm also displays less spread than Gradient Boosting. Therefore, the RandomForest model is selected for this dataset.
+```{r }
+rValues <- resamples(list(rf=rfFit,gbm=gbmFit))
+summary(rValues)
+bwplot(rValues,metric="Kappa",main="RandomForest (rf) vs Gradient Boosting (gbm)")
+```
+
+
+## Cross Validation
+We measure the accuracy of our model by using our training and  cross validation sets. 
+```{r }
+rfFit
+```
+
+###  Accuracy
+
+The confusionMatrix function in the Caret package to validate the selected model with the dataTidyTest test set. The corresponding statistics and error rates are shown.
+
+```{r }
+confusionMatrix(factor(dataTidyTest$classe), factor(predict(rfFit,dataTidyTest)))
+```
+From the result, the selected Model performs at a Kappa value of 0.995, with an accuracy of 99.6%.
+
+
+
+## Test Set Prediction Results
+
+The selected model is used to predict the classification of the testing set provided.
+```{r }
+results <- predict(rfFit,newdata=testing_data)
+print(as.data.frame(results))
+```
+
+
+## Conclusion
+The Random Forest Model provides very good prediction accuracy of the manner in which participants did the weight lifting as measured with accelerometers.
+
+
+
+
+## References
+
+[1] [Data Source](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har)
+
